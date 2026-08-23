@@ -80,6 +80,15 @@ class Settings:
     # ── Storage ──
     SCREENSHOT_DIR: str = os.getenv("SCREENSHOT_DIR", "./screenshots")
 
+    # ── Debug / development ──
+    # When true, alerts are routed through `alerts.debug_receiver` instead of
+    # real SMTP / Twilio. Lets us verify the full pipeline end-to-end without
+    # external accounts. NEVER enable in production.
+    ALERT_DEBUG_MODE: bool = os.getenv("ALERT_DEBUG_MODE", "false").lower() == "true"
+    DEBUG_SMTP_HOST: str = os.getenv("DEBUG_SMTP_HOST", "127.0.0.1")
+    DEBUG_SMTP_PORT: int = int(os.getenv("DEBUG_SMTP_PORT", "1025"))
+    DEBUG_LOG_FILE: str = os.getenv("DEBUG_LOG_FILE", "./.alert-debug.log")
+
     # ── Colors for visualization ──
     CLASS_COLORS: dict = {
         "Face Mask":   (255, 107, 107),

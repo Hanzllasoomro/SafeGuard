@@ -20,7 +20,10 @@ from typing import List, Optional
 
 import asyncio
 import cv2
+import socket
+import struct
 import sys
+import xml.etree.ElementTree as ET
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
@@ -134,6 +137,151 @@ def create_camera(payload: CameraCreate, db: Session = Depends(get_db)) -> dict:
 # order, so the latter would otherwise grab `/scan-local` as `camera_id` and
 # reject it as a non-integer. Same reason `/{camera_id}/test` is harmless:
 # its path has an extra segment that doesn't conflict.
+#
+# Same rule applies to `/api/cameras/auto-detect` directly below.
+_ONVIF_MULTICAST_ADDR = "239.255.255.255"
+_ONVIF_MULTICAST_PORT = 3702
+_ONVIF_PROBE = (
+    "<?xml version='1.0' encoding='utf-8'?>"
+    '<Envelope xmlns:dn="http://www.onvif.org/ver10/network/wsdl" '
+    'xmlns="http://www.w3.org/2003/05/soap-envelope">'
+    "<Header>"
+    '<wsa:MessageID xmlns:wsa="http://schemas.xmlsoap.org/ws/2004/08/addressing">'
+    "uuid:probe-{uuid}"
+    "</wsa:MessageID>"
+    '<wsa:To xmlns:wsa="http://schemas.xmlsoap.org/ws/2004/08/addressing">'
+    "urn:schemas-xmlsoap-org:ws:2005:04:discovery"
+    "</wsa:To>"
+    '<wsa:Action xmlns:wsa="http://schemas.xmlsoap.org/ws/2004/08/addressing">'
+    "http://schemas.xmlsoap.org/ws/2005/04/discovery/Probe"
+    "</wsa:Action>"
+    "</Header>"
+    "<Body>"
+    "<Probe xmlns='http://schemas.xmlsoap.org/ws/2005/04/discovery'>"
+    "<Types>dn:NetworkVideoTransmitter</Types>"
+    "</Probe>"
+    "</Body>"
+    "</Envelope>"
+)
+
+
+async def _discover_onvif(timeout: float = 3.0) -> list[dict]:
+    """WS-Discovery multicast probe for ONVIF cameras on the LAN.
+
+    Returns a list of `{ip, port, manufacturer, model, xaddr}` dicts, deduped
+    by `(ip, port)`. If multicast is blocked (corporate firewall, etc.) the
+    helper returns `[]` instead of raising — the front-end treats that as
+    "no ONVIF devices reachable" and still shows local webcams.
+
+    Runs in a thread executor to keep the FastAPI event loop free. The
+    timeout is intentionally short (default 3s) so the dashboard stays
+    responsive on networks with no ONVIF devices — bump via
+    `?onvif_timeout=` if a slower site is expected.
+    """
+
+    def _probe() -> list[dict]:
+        import uuid as _uuid
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            # Bind to all interfaces on an OS-chosen port. Some Windows
+            # builds refuse IP_ADD_MEMBERSHIP without an explicit bind.
+            sock.bind(("", 0))
+            mreq = struct.pack(
+                "=4sl",
+                bytes(int(b) for b in _ONVIF_MULTICAST_ADDR.split(".")),
+                socket.INADDR_ANY,
+            )
+            sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+            sock.settimeout(timeout)
+
+            message_id = str(_uuid.uuid4())
+            payload = _ONVIF_PROBE.format(uuid=message_id).encode("utf-8")
+            sock.sendto(
+                payload, (_ONVIF_MULTICAST_ADDR, _ONVIF_MULTICAST_PORT)
+            )
+
+            found: dict[tuple[str, int], dict] = {}
+            # Loop on recv() until the socket times out — the
+            # `sock.settimeout(timeout)` above is what bounds the wait.
+            while True:
+                try:
+                    data, addr = sock.recvfrom(8192)
+                except socket.timeout:
+                    break
+                except OSError:
+                    break
+                ip = addr[0]
+                try:
+                    root = ET.fromstring(data)
+                except ET.ParseError:
+                    continue
+                # WS-Discovery ProbeMatches wrap a SequenceId/MessageNumber
+                # then an arbitrary number of <ProbeMatch> elements. SOAP
+                # namespace prefix differs across cameras, so match by
+                # local-name.
+                matches = [
+                    el for el in root.iter() if el.tag.endswith("ProbeMatch")
+                ]
+                if not matches:
+                    continue
+                for m in matches:
+                    xaddr_el = next(
+                        (e for e in m.iter() if e.tag.endswith("XAddrs")), None
+                    )
+                    scopes_el = next(
+                        (e for e in m.iter() if e.tag.endswith("Scopes")), None
+                    )
+                    types_el = next(
+                        (e for e in m.iter() if e.tag.endswith("Types")), None
+                    )
+                    if xaddr_el is None or not xaddr_el.text:
+                        continue
+                    # XAddrs is a space-separated list of URLs; the first
+                    # one is enough for "show me the camera" purposes.
+                    first_url = xaddr_el.text.strip().split()[0]
+                    # urlparse: scheme://host:port/path
+                    from urllib.parse import urlparse
+                    parsed = urlparse(first_url)
+                    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+                    host = parsed.hostname or ip
+                    manufacturer = ""
+                    model = ""
+                    if scopes_el is not None and scopes_el.text:
+                        # Scopes are space-separated "onvif://www.onvif.org/<key>/<value>" URIs.
+                        for s in scopes_el.text.split():
+                            if s.startswith("onvif://www.onvif.org/name/"):
+                                manufacturer = s.rsplit("/", 1)[-1] or ""
+                            if s.startswith("onvif://www.onvif.org/hardware/"):
+                                model = s.rsplit("/", 1)[-1] or ""
+                    types = (
+                        types_el.text.strip() if types_el is not None and types_el.text else ""
+                    )
+                    key = (host, port)
+                    if key in found:
+                        continue
+                    found[key] = {
+                        "ip": host,
+                        "port": port,
+                        "manufacturer": manufacturer,
+                        "model": model,
+                        "xaddr": first_url,
+                        "types": types,
+                    }
+            return list(found.values())
+        except Exception:
+            # Multicast unsupported / blocked / sendto failed. The frontend
+            # surfaces "no ONVIF devices found" instead of an error.
+            return []
+        finally:
+            try:
+                sock.close()
+            except Exception:
+                pass
+
+    return await asyncio.get_event_loop().run_in_executor(None, _probe)
+
+
 @router.get("/api/cameras/scan-local")
 async def scan_cameras(max_index: int = 4) -> dict:
     """Enumerate local webcams. Frontend uses this to populate the
@@ -143,6 +291,36 @@ async def scan_cameras(max_index: int = 4) -> dict:
     """
     cameras = await _scan_local_cameras(max_index=max_index)
     return {"cameras": cameras}
+
+
+@router.get("/api/cameras/auto-detect")
+async def auto_detect_cameras(max_index: int = 4, onvif_timeout: float = 3.0) -> dict:
+    """Combined webcam + ONVIF discovery in one round-trip.
+
+    Frontend's "Auto-Detect" button hits this once and shows the user a
+    dialog with two sections: local webcams (ready to add) and ONVIF cameras
+    on the LAN. The user picks which to add and they're POSTed individually
+    through `POST /api/cameras` so existing validation + duplicate-name
+    handling applies.
+
+    Return shape:
+        {
+          "local":   [{"index":0,"width":640,"height":480,"backend":"DSHOW"}],
+          "onvif":   [{"ip":"192.168.1.50","port":80,"manufacturer":"Hikvision",
+                       "model":"DS-2CD","xaddr":"http://...","types":"..."}],
+          "summary": {"local_count": 1, "onvif_count": 0},
+        }
+    """
+    local = await _scan_local_cameras(max_index=max_index)
+    onvif = await _discover_onvif(timeout=onvif_timeout)
+    return {
+        "local": local,
+        "onvif": onvif,
+        "summary": {
+            "local_count": len(local),
+            "onvif_count": len(onvif),
+        },
+    }
 
 
 @router.get("/api/cameras/{camera_id}")

@@ -1,0 +1,178 @@
+=== 2026-08-09T21:49:20.544183 | channel=email ===
+Subject: 🚨 SafeGuard AI — PPE Violation Detected
+
+PPE Violation Detected!
+Missing: Helmet, Safety Vest
+Time: 2026-08-09T21:49:20.543121
+Details: This is a test alert from the SafeGuard AI Settings panel.
+
+
+Payload:
+  to: ops@example.com
+  from: test@example.com
+  violation_id: None
+  missing_ppe: Helmet, Safety Vest
+  screenshot: None
+=== 2026-08-09T21:49:20.566447 | channel=whatsapp ===
+Subject: SafeGuard AI — PPE VIOLATION DETECTED
+
+SafeGuard AI — PPE VIOLATION DETECTED
+Timestamp: 2026-08-09T21:49:20.565920
+Missing PPE: Helmet, Safety Vest
+Worker Count: 1
+Details: This is a test alert from the SafeGuard AI Settings panel.
+
+
+Payload:
+  from: whatsapp:+14155238886
+  to: whatsapp:+15555550100
+  violation_id: None
+  missing_ppe: Helmet, Safety Vest
+=== 2026-08-09T21:49:42.106747 | channel=email ===
+Subject: 🚨 SafeGuard AI — PPE Violation Detected
+
+PPE Violation Detected!
+Missing: Helmet, Safety Vest
+Time: 2026-08-09T21:49:42.105773
+Details: This is a test alert from the SafeGuard AI Settings panel.
+
+
+Payload:
+  to: ops@example.com
+  from: test@example.com
+  violation_id: None
+  missing_ppe: Helmet, Safety Vest
+  screenshot: None
+=== 2026-08-09T21:49:42.112866 | channel=whatsapp ===
+Subject: SafeGuard AI — PPE VIOLATION DETECTED
+
+SafeGuard AI — PPE VIOLATION DETECTED
+Timestamp: 2026-08-09T21:49:42.112690
+Missing PPE: Helmet, Safety Vest
+Worker Count: 1
+Details: This is a test alert from the SafeGuard AI Settings panel.
+
+
+Payload:
+  from: whatsapp:+14155238886
+  to: whatsapp:+15555550100
+  violation_id: None
+  missing_ppe: Helmet, Safety Vest
+=== 2026-08-09T21:49:42.893767 | channel=email ===
+Subject: 🚨 SafeGuard AI — PPE Violation Detected
+
+PPE Violation Detected!
+Missing: Helmet, Safety Vest, Face Mask
+Time: 2026-08-09 21:49:42.862600
+
+
+Payload:
+  to: ops@example.com
+  from: test@example.com
+  violation_id: 5
+  missing_ppe: Helmet, Safety Vest, Face Mask
+  screenshot: ./screenshots\f4bf205a-56a6-4aed-a36a-c4573ccd52ad.jpg
+=== 2026-08-09T21:49:42.899884 | channel=whatsapp ===
+Subject: SafeGuard AI — PPE VIOLATION DETECTED
+
+SafeGuard AI — PPE VIOLATION DETECTED
+Timestamp: 2026-08-09 21:49:42.862600
+Missing PPE: Helmet, Safety Vest, Face Mask
+Worker Count: 1
+
+
+Payload:
+  from: whatsapp:+14155238886
+  to: whatsapp:+15555550100
+  violation_id: 5
+  missing_ppe: Helmet, Safety Vest, Face Mask
+=== 2026-08-09T21:51:25.157293 | channel=email ===
+Subject: 🚨 SafeGuard AI — PPE Violation Detected
+
+PPE Violation Detected!
+Missing: Helmet, Safety Vest
+Time: 2026-08-09T21:51:25.152515
+Details: This is a test alert from the SafeGuard AI Settings panel.
+
+
+Payload:
+  to: ops@example.com
+  from: test@example.com
+  violation_id: None
+  missing_ppe: Helmet, Safety Vest
+  screenshot: None
+=== 2026-08-09T21:54:10.913718 | channel=email ===
+Subject: 🚨 SafeGuard AI — PPE Violation Detected
+
+PPE Violation Detected!
+Missing: Helmet, Safety Vest
+Time: 2026-08-09T21:54:10.911334
+Details: This is a test alert from the SafeGuard AI Settings panel.
+
+
+Payload:
+  to: ops@example.com
+  from: test@example.com
+  violation_id: None
+  missing_ppe: Helmet, Safety Vest
+  screenshot: None
+=== 2026-08-09T21:55:05.080388 | channel=email ===
+Subject: 🚨 SafeGuard AI — PPE Violation Detected
+
+PPE Violation Detected!
+Missing: Helmet, Safety Vest
+Time: 2026-08-09T21:55:05.076719
+Details: This is a test alert from the SafeGuard AI Settings panel.
+
+
+Payload:
+  to: ops@example.com
+  from: test@example.com
+  violation_id: None
+  missing_ppe: Helmet, Safety Vest
+  screenshot: None
+=== 2026-08-09T21:59:52.514918 | channel=email ===
+Subject: 🚨 SafeGuard AI — PPE Violation Detected
+
+PPE Violation Detected!
+Missing: Helmet, Safety Vest
+Time: 2026-08-09T21:59:52.509932
+Details: This is a test alert from the SafeGuard AI Settings panel.
+
+
+Payload:
+  to: ops@example.com
+  from: test@example.com
+  violation_id: None
+  missing_ppe: Helmet, Safety Vest
+  screenshot: None
+=== 2026-08-09T21:59:56.327874 | channel=whatsapp ===
+Subject: SafeGuard AI — PPE VIOLATION DETECTED
+
+SafeGuard AI — PPE VIOLATION DETECTED
+Timestamp: 2026-08-09T21:59:56.327360
+Missing PPE: Helmet, Safety Vest
+Worker Count: 1
+Details: This is a test alert from the SafeGuard AI Settings panel.
+
+
+Payload:
+  from: whatsapp:+14155238886
+  to: whatsapp:+15555550100
+  violation_id: None
+  missing_ppe: Helmet, Safety Vest
+=== 2026-08-21T10:52:51.777010 | channel=whatsapp ===
+Subject: SafeGuard AI — PPE VIOLATION DETECTED
+
+SafeGuard AI — PPE VIOLATION DETECTED
+Timestamp: 2026-08-21 10:38:35.777180
+Missing PPE: Helmet, Safety Vest, Face Mask
+Worker Count: 1
+Details: Live camera: laptop (unknown location)
+
+
+Payload:
+  from: whatsapp:+14155238886
+  to: whatsapp:923106387577
+  violation_id: 16
+  missing_ppe: Helmet, Safety Vest, Face Mask

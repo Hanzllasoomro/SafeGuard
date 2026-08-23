@@ -4,7 +4,9 @@ SafeGuard AI — FastAPI Main Application
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-import os, sys
+import os, sys, logging
+
+logger = logging.getLogger("uvicorn.error")
 
 # Ensure backend dir is in path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -63,7 +65,23 @@ async def startup_event():
     print(f"  Email alerts:    {'ON' if settings.ENABLE_EMAIL_ALERTS else 'OFF'}")
     print(f"  WhatsApp alerts: {'ON' if settings.ENABLE_WHATSAPP_ALERTS else 'OFF'}")
     print(f"  Screenshots:     {settings.SCREENSHOT_DIR}")
+    if settings.ALERT_DEBUG_MODE:
+        print(f"  Alert debug:     ON  -> {settings.DEBUG_SMTP_HOST}:{settings.DEBUG_SMTP_PORT}, log={settings.DEBUG_LOG_FILE}")
+        # Start the local aiosmtpd receiver so email_service.py can deliver
+        # to it. Failure to bind is logged but does not abort startup —
+        # email_service.py will fall back to file-only logging.
+        from alerts.debug_receiver import start as start_debug
+        start_debug()
+    else:
+        print(f"  Alert debug:     OFF")
     print("=" * 50)
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    if settings.ALERT_DEBUG_MODE:
+        from alerts.debug_receiver import stop as stop_debug
+        stop_debug()
 
 @app.get("/")
 async def root():

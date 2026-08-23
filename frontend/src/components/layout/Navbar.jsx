@@ -1,110 +1,65 @@
-import React, { useState, useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { getViolations } from '../../api/client';
+import React from 'react';
+import { NavLink } from 'react-router-dom';
 
 const Navbar = () => {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [notifications, setNotifications] = useState([]);
-  const [unreadCount, setUnreadCount] = useState(0);
-
-  const getPageTitle = () => {
-    switch (location.pathname) {
-      case '/': return 'Dashboard';
-      case '/violations': return 'Violations History';
-      case '/cameras': return 'Camera Management';
-      case '/upload': return 'Upload & Detect';
-      case '/settings': return 'System Settings';
-      default: return '';
-    }
-  };
-
-  useEffect(() => {
-    const fetchNotifications = async () => {
-      try {
-        const res = await getViolations({ limit: 5, offset: 0 });
-        const data = Array.isArray(res.data) ? res.data : [];
-        setNotifications(data);
-        setUnreadCount(data.length);
-      } catch (e) {
-        // API not available yet
-      }
-    };
-    fetchNotifications();
-    const interval = setInterval(fetchNotifications, 15000);
-    return () => clearInterval(interval);
-  }, []);
-
   return (
-    <header className="flex justify-between items-center h-16 px-8 border-b border-sg-outline-variant bg-sg-surface sticky top-0 z-10 animate-fade-in-down shrink-0">
-      <h1 className="font-headline-lg text-sg-on-surface tracking-tight">{getPageTitle()}</h1>
-
+    <header
+      className="fixed top-0 left-64 right-0 h-16 z-50 flex items-center justify-between px-6"
+      style={{
+        background: 'rgba(255,255,255,0.7)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        borderBottom: '1px solid var(--color-outline-variant)',
+      }}
+    >
+      {/* Left: Brand + Top Nav */}
       <div className="flex items-center gap-6">
-        {/* Status Chip */}
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-sg-surface-container-high border border-sg-outline-variant rounded-full">
-          <span className="w-2 h-2 rounded-full bg-sg-primary animate-pulse"></span>
-          <span className="font-data-mono text-sg-primary">YOLOv8s Active</span>
-        </div>
+        <span style={{ fontFamily: 'Geist, sans-serif', fontWeight: 900, fontSize: '18px', color: '#FF6B00', letterSpacing: '-0.01em' }}>
+          SafeGuard AI
+        </span>
+        <div className="w-px h-5" style={{ background: 'var(--color-outline-variant)' }} />
+        <nav className="hidden md:flex items-center gap-6">
+          {['Live View', 'Analysis', 'Archives'].map((label) => (
+            <a
+              key={label}
+              href="#"
+              className="font-body-sm transition-colors duration-150 hover:text-on-surface"
+              style={{ color: 'var(--color-on-surface-variant)', fontSize: '14px', fontWeight: 500 }}
+            >
+              {label}
+            </a>
+          ))}
+        </nav>
+      </div>
 
-        {/* Notification Bell */}
-        <div className="relative">
-          <button
-            onClick={() => setShowNotifications(!showNotifications)}
-            className="relative p-2 text-sg-on-surface-variant hover:text-sg-on-surface transition-colors hover:bg-sg-surface-container-high rounded-full"
-          >
-            <span className="material-symbols-outlined text-xl">notifications</span>
-            {unreadCount > 0 && (
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-sg-error rounded-full border border-sg-surface"></span>
-            )}
-          </button>
-
-          {/* Notification Dropdown */}
-          {showNotifications && (
-            <div className="absolute right-0 top-12 w-80 bg-sg-surface border border-sg-outline-variant rounded-xl shadow-2xl shadow-black/50 z-50 overflow-hidden">
-              <div className="flex justify-between items-center px-5 py-4 border-b border-sg-outline-variant bg-sg-surface-container-low">
-                <h3 className="font-headline-sm text-sg-on-surface">Recent Alerts</h3>
-                <button
-                  onClick={() => setShowNotifications(false)}
-                  className="text-sg-on-surface-variant hover:text-sg-on-surface transition-colors"
-                >
-                  <span className="material-symbols-outlined text-lg">close</span>
-                </button>
-              </div>
-              <div className="max-h-64 overflow-y-auto">
-                {notifications.length === 0 ? (
-                  <p className="p-5 text-center font-body-md text-sg-on-surface-variant">No notifications</p>
-                ) : (
-                  notifications.map((n) => (
-                    <div
-                      key={n.id}
-                      onClick={() => { navigate('/violations'); setShowNotifications(false); }}
-                      className="px-5 py-3 border-b border-sg-outline-variant/50 hover:bg-sg-surface-variant transition-colors cursor-pointer"
-                    >
-                      <div className="flex justify-between items-start">
-                        <span className="font-body-md font-medium text-sg-error">{n.violation_type || 'Violation'}</span>
-                        <span className="font-data-mono text-sg-on-surface-variant">
-                          {new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </div>
-                      <p className="font-body-md text-sg-on-surface-variant mt-1">
-                        {n.person_count} worker(s) &bull; {Math.round((n.confidence || 0) * 100)}% confidence
-                      </p>
-                    </div>
-                  ))
-                )}
-              </div>
-              {notifications.length > 0 && (
-                <div
-                  onClick={() => { navigate('/violations'); setShowNotifications(false); }}
-                  className="px-5 py-3 text-center font-body-md font-bold text-sg-primary hover:bg-sg-surface-container-high cursor-pointer border-t border-sg-outline-variant transition-colors"
-                >
-                  View All Violations
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+      {/* Right: Actions */}
+      <div className="flex items-center gap-3">
+        <button
+          className="flex items-center gap-2 px-4 py-1.5 rounded font-data-label uppercase tracking-wider hover:opacity-90 active:opacity-80 transition-opacity"
+          style={{ background: '#FF2D55', color: '#fff', fontSize: '11px', fontFamily: 'JetBrains Mono, monospace', fontWeight: 700 }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: '16px', fontVariationSettings: "'FILL' 1" }}>emergency</span>
+          Emergency Stop
+        </button>
+        <button
+          className="px-4 py-1.5 rounded font-data-label uppercase tracking-wider transition-colors hover:text-on-surface"
+          style={{ border: '1px solid var(--color-outline)', color: 'var(--color-on-surface-variant)', fontSize: '11px', fontFamily: 'JetBrains Mono, monospace', background: 'transparent' }}
+        >
+          Export
+        </button>
+        <div className="w-px h-5" style={{ background: 'var(--color-outline-variant)', marginLeft: '4px' }} />
+        <button
+          className="p-2 rounded-full transition-colors hover:text-on-surface"
+          style={{ color: 'var(--color-on-surface-variant)' }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>notifications</span>
+        </button>
+        <button
+          className="p-2 rounded-full transition-colors hover:text-on-surface"
+          style={{ color: 'var(--color-on-surface-variant)' }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>account_circle</span>
+        </button>
       </div>
     </header>
   );

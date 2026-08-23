@@ -103,8 +103,11 @@ const ViolationDetailDrawer = ({ violationId, onClose }) => {
                 className="max-h-[60vh] w-full object-contain"
               />
             ) : (
-              <div className="h-48 flex items-center justify-center">
+              <div className="h-48 flex flex-col items-center justify-center gap-2">
                 <span className="material-symbols-outlined text-sg-surface-bright text-3xl">image</span>
+                <p className="font-body-sm text-sg-on-surface-variant text-center px-4">
+                  No screenshot — live-stream violations don't persist a frame.
+                </p>
               </div>
             )}
           </div>
