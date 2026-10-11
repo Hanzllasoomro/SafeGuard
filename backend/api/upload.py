@@ -116,6 +116,8 @@ async def upload_image(
             "confidence": db_violation.confidence,
             "screenshot_path": screenshot_path,
             "timestamp": str(db_violation.timestamp),
+            "details": db_violation.details,
+            "source": db_violation.source,
         }
         background_tasks.add_task(trigger_alerts, violation_dict, screenshot_path)
 
@@ -222,6 +224,8 @@ async def upload_video(background_tasks: BackgroundTasks, file: UploadFile = Fil
                     "confidence": db_violation.confidence,
                     "screenshot_path": screenshot_path,
                     "timestamp": str(db_violation.timestamp),
+                    "details": db_violation.details,
+                    "source": db_violation.source,
                 }
                 background_tasks.add_task(trigger_alerts, violation_dict, screenshot_path)
                 recorded_any = True
