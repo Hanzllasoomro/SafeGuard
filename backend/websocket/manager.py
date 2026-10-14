@@ -98,11 +98,16 @@ def _build_capture(camera: Camera) -> cv2.VideoCapture:
     return cv2.VideoCapture(url)
 
 
-def _write_violations(camera: Camera, frame, detections, violations) -> int:
+def _write_violations(camera: Camera, frame, detections, violations) -> tuple[int, list[dict]]:
     """Persist violations to the DB. Runs in a thread via run_in_executor.
-    Returns the number of rows written (after dedup)."""
+    Returns (rows_written, list_of_violation_dicts_to_alert).
+
+    Alert dispatch is NOT done here — `trigger_alerts` is async and this
+    function runs in a sync thread executor. The caller (the websocket
+    loop) awaits `trigger_alerts` for each dict we return."""
     full_detections_json = json.dumps(_serialize_detections(detections))
     written = 0
+    pending_alerts: list[dict] = []
     db = SessionLocal()
     try:
         for v in violations:
@@ -128,7 +133,7 @@ def _write_violations(camera: Camera, frame, detections, violations) -> int:
             db.commit()
             db.refresh(row)
             written += 1
-            violation_dict = {
+            pending_alerts.append({
                 "id": row.id,
                 "violation_type": row.violation_type,
                 "missing_ppe": row.missing_ppe,
@@ -136,15 +141,12 @@ def _write_violations(camera: Camera, frame, detections, violations) -> int:
                 "confidence": row.confidence,
                 "screenshot_path": None,
                 "timestamp": str(row.timestamp),
-            }
-            # Alerts fire-and-forget — alert_manager spawns its own thread.
-            try:
-                trigger_alerts(violation_dict, screenshot_path=None)
-            except Exception as e:
-                print(f"[WS] alert trigger failed: {e}")
+                "details": row.details,
+                "source": row.source,
+            })
     finally:
         db.close()
-    return written
+    return written, pending_alerts
 
 
 @router.websocket("/ws/stream/{camera_id}")
@@ -197,13 +199,16 @@ async def websocket_endpoint(websocket: WebSocket, camera_id: int):
 
             # Persist violations off-loop (uses its own SessionLocal).
             if violations:
-                written = await loop.run_in_executor(
+                written, pending_alerts = await loop.run_in_executor(
                     None, _write_violations, camera, frame, detections, violations
                 )
-                if written:
-                    # Best-effort annotation of the in-frame warning banner;
-                    # the count of *new* rows this frame is unused at the moment.
-                    pass
+                # Dispatch email/WhatsApp alerts from the async context
+                # so `trigger_alerts` (which is async) actually executes.
+                for vdata in pending_alerts:
+                    try:
+                        await trigger_alerts(vdata, screenshot_path=None)
+                    except Exception as e:
+                        print(f"[WS] alert trigger failed: {e}")
 
             annotated = annotate_frame(frame.copy(), detections, violations)
 
