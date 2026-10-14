@@ -207,6 +207,30 @@ def synthesize_workers_from_unclaimed_ppe(unclaimed_ppes: List[Dict], existing_p
                 "inferred": True,
             })
 
+    # Standalone masks without detected person or helmet
+    masks = [p for p in unclaimed_ppes if normalize_ppe_name(p["class_name"]) == "Face Mask"]
+    for m in masks:
+        mx1, my1, mx2, my2 = m["bbox"]
+        mw = mx2 - mx1
+        mh = my2 - my1
+        already_covered = any(
+            (s["bbox"][0] <= (mx1 + mx2) / 2.0 <= s["bbox"][2])
+            and (s["bbox"][1] <= (my1 + my2) / 2.0 <= s["bbox"][3])
+            for s in synthesized
+        )
+        if not already_covered:
+            px1 = int(mx1 - 0.5 * mw)
+            py1 = max(0, int(my1 - 0.3 * mh))
+            px2 = int(mx2 + 0.5 * mw)
+            py2 = int(my1 + 6.0 * mh)
+            synthesized.append({
+                "bbox": [max(0, px1), py1, px2, py2],
+                "confidence": m["confidence"],
+                "class_id": settings.PERSON_CLASS_ID,
+                "class_name": "Person",
+                "inferred": True,
+            })
+
     return synthesized
 
 
@@ -217,9 +241,9 @@ def compute_violations(detections: List[Dict], required_ppe: Optional[List[str]]
     {
         "person_bbox": [x1, y1, x2, y2],
         "status": "COMPLIANT" | "VIOLATION",
-        "missing_ppe": ["Helmet", "Safety Vest"],  # Exact list of missing items
-        "has_ppe": ["Safety Vest"],                # Verified items worn
-        "violation_type": "Missing: Helmet",       # Human-readable summary
+        "missing_ppe": ["Helmet", "Safety Vest", "Face Mask"],  # Exact list of missing items
+        "has_ppe": ["Helmet", "Safety Vest"],                  # Verified items worn
+        "violation_type": "Missing: Face Mask",                 # Human-readable summary
         "confidence": float,
         "compliance_score": float (0.0 to 1.0)
     }
@@ -235,7 +259,7 @@ def compute_violations(detections: List[Dict], required_ppe: Optional[List[str]]
             canonical_required.append(c)
 
     if not canonical_required:
-        canonical_required = ["Helmet", "Safety Vest"]
+        canonical_required = ["Helmet", "Safety Vest", "Face Mask"]
 
     # Separate Person and PPE detections
     persons = [d for d in detections if d.get("class_id") == settings.PERSON_CLASS_ID]

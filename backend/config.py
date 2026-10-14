@@ -38,8 +38,8 @@ class Settings:
 
     # ── Violation rules ──
     # Required PPE for every detected person. Configurable via .env.
-    # Default baseline for construction sites: Helmet and Safety Vest.
-    REQUIRED_PPE: list = [x.strip() for x in os.getenv("REQUIRED_PPE", "Helmet,Safety Vest").split(",") if x.strip()]
+    # Default baseline includes all 3 monitored items: Helmet, Safety Vest, Face Mask.
+    REQUIRED_PPE: list = [x.strip() for x in os.getenv("REQUIRED_PPE", "Helmet,Safety Vest,Face Mask").split(",") if x.strip()]
 
     # Per-class IoU thresholds for PPE → person association. Smaller objects
     # (face masks) need a tighter threshold because their bounding boxes are
