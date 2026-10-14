@@ -98,12 +98,26 @@ def _build_capture(camera: Camera) -> cv2.VideoCapture:
     return cv2.VideoCapture(url)
 
 
-def _write_violations(camera: Camera, frame, detections, violations) -> int:
-    """Persist violations to the DB. Runs in a thread via run_in_executor.
-    Returns the number of rows written (after dedup)."""
+def _write_violations(camera: Camera, frame, detections, violations, loop=None) -> int:
+    """Persist violations to the DB and capture evidence screenshots.
+    Runs in a thread via run_in_executor. Returns the number of rows written
+    (after dedup).
+
+    `loop` is the main asyncio event loop — needed so we can schedule the
+    async `trigger_alerts` coroutine from this sync thread context.
+    """
+    import uuid
+    import os
     full_detections_json = json.dumps(_serialize_detections(detections))
     written = 0
     db = SessionLocal()
+
+    # Capture an annotated screenshot ONCE per frame (shared across all
+    # violations in this frame). Only created if at least one violation
+    # passes the dedup filter.
+    screenshot_url = None
+    screenshot_disk_path = None
+
     try:
         for v in violations:
             if v["status"] != "VIOLATION":
@@ -111,12 +125,21 @@ def _write_violations(camera: Camera, frame, detections, violations) -> int:
             source = f"camera:{camera.id}"
             if not deduplicator.should_log(source, v["missing_ppe"]):
                 continue
+
+            # Save the annotated screenshot on first real violation this frame
+            if screenshot_url is None:
+                annotated_evidence = annotate_frame(frame.copy(), detections, violations)
+                screenshot_filename = f"{uuid.uuid4()}.jpg"
+                screenshot_disk_path = os.path.join(settings.SCREENSHOT_DIR, screenshot_filename)
+                cv2.imencode(".jpg", annotated_evidence, [cv2.IMWRITE_JPEG_QUALITY, 85])[1].tofile(screenshot_disk_path)
+                screenshot_url = f"/screenshots/{screenshot_filename}"
+
             row = Violation(
                 timestamp=datetime.utcnow(),
                 violation_type=f"Missing: {', '.join(v['missing_ppe'])}",
                 person_count=sum(1 for d in detections if d["class_id"] == settings.PERSON_CLASS_ID),
                 violation_count=sum(1 for vv in violations if vv["status"] == "VIOLATION"),
-                screenshot_path=None,  # live stream doesn't persist a screenshot file
+                screenshot_path=screenshot_url,
                 confidence=v["confidence"],
                 missing_ppe=", ".join(v["missing_ppe"]),
                 details=f"Live camera: {camera.name} ({camera.location or 'unknown location'})",
@@ -134,12 +157,20 @@ def _write_violations(camera: Camera, frame, detections, violations) -> int:
                 "missing_ppe": row.missing_ppe,
                 "person_count": row.person_count,
                 "confidence": row.confidence,
-                "screenshot_path": None,
+                "screenshot_path": screenshot_url,
                 "timestamp": str(row.timestamp),
             }
-            # Alerts fire-and-forget — alert_manager spawns its own thread.
+            # trigger_alerts is async — schedule it on the main event loop
+            # from this sync worker thread. Fire-and-forget.
             try:
-                trigger_alerts(violation_dict, screenshot_path=None)
+                if loop is not None and loop.is_running():
+                    asyncio.run_coroutine_threadsafe(
+                        trigger_alerts(violation_dict, screenshot_path=screenshot_disk_path),
+                        loop,
+                    )
+                else:
+                    # Fallback: create a new event loop in this thread
+                    asyncio.run(trigger_alerts(violation_dict, screenshot_path=screenshot_disk_path))
             except Exception as e:
                 print(f"[WS] alert trigger failed: {e}")
     finally:
@@ -198,7 +229,7 @@ async def websocket_endpoint(websocket: WebSocket, camera_id: int):
             # Persist violations off-loop (uses its own SessionLocal).
             if violations:
                 written = await loop.run_in_executor(
-                    None, _write_violations, camera, frame, detections, violations
+                    None, _write_violations, camera, frame, detections, violations, loop
                 )
                 if written:
                     # Best-effort annotation of the in-frame warning banner;
