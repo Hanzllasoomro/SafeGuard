@@ -99,16 +99,23 @@ def _build_capture(camera: Camera) -> cv2.VideoCapture:
 
 
 def _write_violations(camera: Camera, frame, detections, violations) -> tuple[int, list[dict]]:
-    """Persist violations to the DB. Runs in a thread via run_in_executor.
-    Returns (rows_written, list_of_violation_dicts_to_alert).
+    """Persist violations to the DB and capture evidence screenshots.
+    Runs in a thread via run_in_executor.
+    Returns (rows_written, list_of_violation_dicts_to_alert)."""
+    import uuid
+    import os
 
-    Alert dispatch is NOT done here — `trigger_alerts` is async and this
-    function runs in a sync thread executor. The caller (the websocket
-    loop) awaits `trigger_alerts` for each dict we return."""
     full_detections_json = json.dumps(_serialize_detections(detections))
     written = 0
     pending_alerts: list[dict] = []
     db = SessionLocal()
+
+    # Capture an annotated screenshot ONCE per frame (shared across all
+    # violations in this frame). Only created if at least one violation
+    # passes the dedup filter.
+    screenshot_url = None
+    screenshot_disk_path = None
+
     try:
         for v in violations:
             if v["status"] != "VIOLATION":
@@ -116,12 +123,21 @@ def _write_violations(camera: Camera, frame, detections, violations) -> tuple[in
             source = f"camera:{camera.id}"
             if not deduplicator.should_log(source, v["missing_ppe"]):
                 continue
+
+            # Save the annotated screenshot on the first real violation in this frame
+            if screenshot_url is None:
+                annotated_evidence = annotate_frame(frame.copy(), detections, violations)
+                screenshot_filename = f"{uuid.uuid4()}.jpg"
+                screenshot_disk_path = os.path.join(settings.SCREENSHOT_DIR, screenshot_filename)
+                cv2.imencode(".jpg", annotated_evidence, [cv2.IMWRITE_JPEG_QUALITY, 85])[1].tofile(screenshot_disk_path)
+                screenshot_url = f"/screenshots/{screenshot_filename}"
+
             row = Violation(
                 timestamp=datetime.utcnow(),
                 violation_type=f"Missing: {', '.join(v['missing_ppe'])}",
                 person_count=sum(1 for d in detections if d["class_id"] == settings.PERSON_CLASS_ID),
                 violation_count=sum(1 for vv in violations if vv["status"] == "VIOLATION"),
-                screenshot_path=None,  # live stream doesn't persist a screenshot file
+                screenshot_path=screenshot_url,
                 confidence=v["confidence"],
                 missing_ppe=", ".join(v["missing_ppe"]),
                 details=f"Live camera: {camera.name} ({camera.location or 'unknown location'})",
@@ -139,7 +155,8 @@ def _write_violations(camera: Camera, frame, detections, violations) -> tuple[in
                 "missing_ppe": row.missing_ppe,
                 "person_count": row.person_count,
                 "confidence": row.confidence,
-                "screenshot_path": None,
+                "screenshot_path": screenshot_url,
+                "screenshot_disk_path": screenshot_disk_path,
                 "timestamp": str(row.timestamp),
                 "details": row.details,
                 "source": row.source,
@@ -206,7 +223,8 @@ async def websocket_endpoint(websocket: WebSocket, camera_id: int):
                 # so `trigger_alerts` (which is async) actually executes.
                 for vdata in pending_alerts:
                     try:
-                        await trigger_alerts(vdata, screenshot_path=None)
+                        ss_path = vdata.get("screenshot_disk_path") or vdata.get("screenshot_path")
+                        await trigger_alerts(vdata, screenshot_path=ss_path)
                     except Exception as e:
                         print(f"[WS] alert trigger failed: {e}")
 
