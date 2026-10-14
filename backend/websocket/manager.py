@@ -135,7 +135,7 @@ def _write_violations(camera: Camera, frame, detections, violations) -> tuple[in
             row = Violation(
                 timestamp=datetime.utcnow(),
                 violation_type=f"Missing: {', '.join(v['missing_ppe'])}",
-                person_count=sum(1 for d in detections if d["class_id"] == settings.PERSON_CLASS_ID),
+                person_count=len(violations),
                 violation_count=sum(1 for vv in violations if vv["status"] == "VIOLATION"),
                 screenshot_path=screenshot_url,
                 confidence=v["confidence"],
@@ -237,9 +237,9 @@ async def websocket_endpoint(websocket: WebSocket, camera_id: int):
 
             frame_base64 = await loop.run_in_executor(None, _encode, annotated)
 
-            total_persons = sum(1 for d in detections if d["class_id"] == settings.PERSON_CLASS_ID)
+            total_persons = len(violations)
             violating = sum(1 for v in violations if v["status"] == "VIOLATION")
-            compliant = total_persons - violating
+            compliant = max(0, total_persons - violating)
             compliance_rate = (compliant / total_persons * 100) if total_persons > 0 else 100.0
 
             data = {
