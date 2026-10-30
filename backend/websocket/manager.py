@@ -21,7 +21,9 @@ automatically — no changes needed there.
 import asyncio
 import base64
 import json
+import os
 import sys
+import uuid
 from datetime import datetime
 from typing import List
 
@@ -99,7 +101,8 @@ def _build_capture(camera: Camera) -> cv2.VideoCapture:
 
 
 def _write_violations(camera: Camera, frame, detections, violations) -> tuple[int, list[dict]]:
-    """Persist violations to the DB. Runs in a thread via run_in_executor.
+    """Persist violations to the DB and save annotated screenshot evidence.
+    Runs in a thread via run_in_executor.
     Returns (rows_written, list_of_violation_dicts_to_alert).
 
     Alert dispatch is NOT done here — `trigger_alerts` is async and this
@@ -110,18 +113,32 @@ def _write_violations(camera: Camera, frame, detections, violations) -> tuple[in
     pending_alerts: list[dict] = []
     db = SessionLocal()
     try:
+        annotated_evidence = None
+        screenshot_filename = None
+        screenshot_path = None
+        screenshot_url = None
+
         for v in violations:
             if v["status"] != "VIOLATION":
                 continue
             source = f"camera:{camera.id}"
             if not deduplicator.should_log(source, v["missing_ppe"]):
                 continue
+
+            # Capture and save live evidence screenshot
+            if annotated_evidence is None:
+                annotated_evidence = annotate_frame(frame.copy(), detections, violations)
+                screenshot_filename = f"{uuid.uuid4()}.jpg"
+                screenshot_path = os.path.join(settings.SCREENSHOT_DIR, screenshot_filename)
+                cv2.imwrite(screenshot_path, annotated_evidence)
+                screenshot_url = f"/screenshots/{screenshot_filename}"
+
             row = Violation(
                 timestamp=datetime.utcnow(),
                 violation_type=f"Missing: {', '.join(v['missing_ppe'])}",
                 person_count=sum(1 for d in detections if d["class_id"] == settings.PERSON_CLASS_ID),
                 violation_count=sum(1 for vv in violations if vv["status"] == "VIOLATION"),
-                screenshot_path=None,  # live stream doesn't persist a screenshot file
+                screenshot_path=screenshot_url,
                 confidence=v["confidence"],
                 missing_ppe=", ".join(v["missing_ppe"]),
                 details=f"Live camera: {camera.name} ({camera.location or 'unknown location'})",
@@ -139,7 +156,7 @@ def _write_violations(camera: Camera, frame, detections, violations) -> tuple[in
                 "missing_ppe": row.missing_ppe,
                 "person_count": row.person_count,
                 "confidence": row.confidence,
-                "screenshot_path": None,
+                "screenshot_path": screenshot_path,
                 "timestamp": str(row.timestamp),
                 "details": row.details,
                 "source": row.source,
@@ -206,7 +223,9 @@ async def websocket_endpoint(websocket: WebSocket, camera_id: int):
                 # so `trigger_alerts` (which is async) actually executes.
                 for vdata in pending_alerts:
                     try:
-                        await trigger_alerts(vdata, screenshot_path=None)
+                        asyncio.create_task(
+                            trigger_alerts(vdata, screenshot_path=vdata.get("screenshot_path"))
+                        )
                     except Exception as e:
                         print(f"[WS] alert trigger failed: {e}")
 
