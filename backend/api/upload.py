@@ -75,9 +75,9 @@ async def upload_image(
     screenshot_url = f"/screenshots/{screenshot_filename}"
 
     # Compute stats
-    total_persons = sum(1 for d in detections if d["class_id"] == settings.PERSON_CLASS_ID)
+    total_persons = len(violations)
     violating = sum(1 for v in violations if v["status"] == "VIOLATION")
-    compliant = total_persons - violating
+    compliant = max(0, total_persons - violating)
 
     full_detections_json = json.dumps(_serialize_detections(detections))
 
@@ -187,7 +187,7 @@ async def upload_video(background_tasks: BackgroundTasks, file: UploadFile = Fil
             cv2.imwrite(screenshot_path, annotated)
             screenshot_url = f"/screenshots/{screenshot_filename}"
 
-            total_persons = sum(1 for d in detections if d["class_id"] == settings.PERSON_CLASS_ID)
+            total_persons = len(violations)
             full_detections_json = json.dumps(_serialize_detections(detections))
 
             recorded_any = False

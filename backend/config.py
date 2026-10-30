@@ -37,10 +37,9 @@ class Settings:
     PPE_CLASS_IDS: list = [0, 1, 3]
 
     # ── Violation rules ──
-    # Required PPE for every detected person. Face Mask is **always required**
-    # (per product decision: not user-configurable). Add or remove entries here
-    # to change the compliance baseline project-wide.
-    REQUIRED_PPE: list = ["Helmet", "Safety Vest", "Face Mask"]
+    # Required PPE for every detected person. Configurable via .env.
+    # Default baseline includes all 3 monitored items: Helmet, Safety Vest, Face Mask.
+    REQUIRED_PPE: list = [x.strip() for x in os.getenv("REQUIRED_PPE", "Helmet,Safety Vest,Face Mask").split(",") if x.strip()]
 
     # Per-class IoU thresholds for PPE → person association. Smaller objects
     # (face masks) need a tighter threshold because their bounding boxes are

@@ -105,13 +105,17 @@ def _write_violations(camera: Camera, frame, detections, violations) -> tuple[in
     Runs in a thread via run_in_executor.
     Returns (rows_written, list_of_violation_dicts_to_alert).
 
-    Alert dispatch is NOT done here — `trigger_alerts` is async and this
-    function runs in a sync thread executor. The caller (the websocket
-    loop) awaits `trigger_alerts` for each dict we return."""
     full_detections_json = json.dumps(_serialize_detections(detections))
     written = 0
     pending_alerts: list[dict] = []
     db = SessionLocal()
+
+    # Capture an annotated screenshot ONCE per frame (shared across all
+    # violations in this frame). Only created if at least one violation
+    # passes the dedup filter.
+    screenshot_url = None
+    screenshot_disk_path = None
+
     try:
         annotated_evidence = None
         screenshot_filename = None
@@ -136,7 +140,7 @@ def _write_violations(camera: Camera, frame, detections, violations) -> tuple[in
             row = Violation(
                 timestamp=datetime.utcnow(),
                 violation_type=f"Missing: {', '.join(v['missing_ppe'])}",
-                person_count=sum(1 for d in detections if d["class_id"] == settings.PERSON_CLASS_ID),
+                person_count=len(violations),
                 violation_count=sum(1 for vv in violations if vv["status"] == "VIOLATION"),
                 screenshot_path=screenshot_url,
                 confidence=v["confidence"],
@@ -238,9 +242,9 @@ async def websocket_endpoint(websocket: WebSocket, camera_id: int):
 
             frame_base64 = await loop.run_in_executor(None, _encode, annotated)
 
-            total_persons = sum(1 for d in detections if d["class_id"] == settings.PERSON_CLASS_ID)
+            total_persons = len(violations)
             violating = sum(1 for v in violations if v["status"] == "VIOLATION")
-            compliant = total_persons - violating
+            compliant = max(0, total_persons - violating)
             compliance_rate = (compliant / total_persons * 100) if total_persons > 0 else 100.0
 
             data = {
